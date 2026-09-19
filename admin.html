@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NARI FASHION | Admin Dashboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+    :root { --green: #0b4035; --cream: #fffaf5; --card-bg: #ffffff; --border: #eadfd6; --text: #1c1c1c; }
+    * { box-sizing: border-box; font-family: 'DM Sans', sans-serif; }
+    body { background: #f7f4ef; color: var(--text); margin: 0; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1, h2 { color: var(--green); margin-top: 0; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; border: 1px solid var(--border); margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: 500; margin-bottom: 5px; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+    button { background: var(--green); color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; font-size: 15px; }
+    button:hover { opacity: 0.9; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid var(--border); padding: 12px; text-align: left; font-size: 14px; }
+    th { background: var(--cream); color: var(--green); }
+    .status-badge { background: #e6f4ea; color: #137333; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .loader { display: none; text-align: center; font-size: 13px; color: var(--green); font-weight: 600; margin-top: 5px; }
+  </style>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+
+<div class="container">
+  <h1>NARI FASHION - Admin Panel</h1>
+
+  <!-- Add Product Form -->
+  <div class="card">
+    <h2>Naya Product Add Karein</h2>
+    <form id="addProductForm">
+      <div class="form-group">
+        <label>Product Name</label>
+        <input type="text" id="pName" placeholder="e.g. Cotton Printed Kurti" required>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="pCategory">
+          <option value="Kurti">Kurti</option>
+          <option value="Saree">Saree</option>
+          <option value="Blouse">Blouse</option>
+          <option value="Lehenga">Lehenga</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Price (₹)</label>
+        <input type="number" id="pPrice" placeholder="e.g. 1299" required>
+      </div>
+      <div class="form-group">
+        <label>Select Product Image (Gallery / Device se Choose karein)</label>
+        <input type="file" id="pImageFile" accept="image/*" required>
+        <div id="uploadStatus" class="loader">Uploading image... Please wait...</div>
+      </div>
+      <button type="submit" id="submitBtn">Add Product to Store</button>
+    </form>
+  </div>
+
+  <!-- Recent Orders Table -->
+  <div class="card">
+    <h2>Customer Orders</h2>
+    <table id="ordersTable">
+      <thead>
+        <tr>
+          <th>Date / Time</th>
+          <th>Customer Name</th>
+          <th>Phone</th>
+          <th>Address</th>
+          <th>Items Ordered</th>
+          <th>Total Amount</th>
+        </tr>
+      </thead>
+      <tbody id="ordersList">
+        <tr><td colspan="6" style="text-align:center;">Loading orders...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // Firebase Config
+  const firebaseConfig = {
+    databaseURL: "https://nari-fashion-default-rtdb.firebaseio.com"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ImgBB API Key (Free Image Hosting)
+  const IMGBB_API_KEY = "c8b16c5b206bd41db7102e3b2c6e6dfd"; 
+
+  // Add Product with Direct Image Upload
+  document.getElementById('addProductForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const fileInput = document.getElementById('pImageFile');
+    
+    if(!fileInput.files[0]) {
+      alert("Kripya image file select karein!");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    uploadStatus.style.display = 'block';
+
+    try {
+      // 1. Upload Image to Free Host (ImgBB)
+      const formData = new FormData();
+      formData.append("image", fileInput.files[0]);
+
+      const imgRes = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: "POST",
+        body: formData
+      });
+      const imgData = await imgRes.json();
+
+      if(!imgData.success) {
+        throw new Error("Image upload failed");
+      }
+
+      const imageUrl = imgData.data.url;
+
+      // 2. Save Product to Firebase
+      const name = document.getElementById('pName').value;
+      const category = document.getElementById('pCategory').value;
+      const price = Number(document.getElementById('pPrice').value);
+
+      await db.ref('products').push({
+        name,
+        category,
+        price,
+        image: imageUrl,
+        createdAt: Date.now()
+      });
+
+      alert("Product successfully add ho gaya hai!");
+      document.getElementById('addProductForm').reset();
+
+    } catch (error) {
+      console.error(error);
+      alert("Product add karne me error aaya: " + error.message);
+    } finally {
+      submitBtn.disabled = false;
+      uploadStatus.style.display = 'none';
+    }
+  });
+
+  // Load Orders Realtime
+  db.ref('orders').on('value', snapshot => {
+    const ordersList = document.getElementById('ordersList');
+    ordersList.innerHTML = '';
+    const data = snapshot.val();
+
+    if(!data) {
+      ordersList.innerHTML = '<tr><td colspan="6" style="text-align:center;">Abhi koi order nahi aaya hai.</td></tr>';
+      return;
+    }
+
+    Object.keys(data).reverse().forEach(key => {
+      const order = data[key];
+      const date = new Date(order.timestamp).toLocaleString('en-IN');
+      const items = order.items.map(i => `${i.name} (x${i.qty})`).join(', ');
+
+      ordersList.innerHTML += `
+        <tr>
+          <td>${date}</td>
+          <td><strong>${order.customer.name}</strong></td>
+          <td><a href="tel:${order.customer.phone}">${order.customer.phone}</a></td>
+          <td>${order.customer.address}</td>
+          <td>${items}</td>
+          <td><strong>₹${order.total}</strong> (COD)</td>
+        </tr>
+      `;
+    });
+  });
+</script>
+
+</body>
+</html>
